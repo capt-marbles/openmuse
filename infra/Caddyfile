@@ -1,0 +1,15 @@
+# One origin for the web UI and the API, so the tunnel needs a single route.
+:80 {
+	encode zstd gzip
+	handle /api/* {
+		# Stream agent replies (SSE) without buffering.
+		reverse_proxy api:8787 {
+			flush_interval -1
+		}
+	}
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}

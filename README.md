@@ -140,6 +140,10 @@ COMPUTER_ENABLED=true pnpm dev
 
 The API needs access to the Docker CLI and engine. Commands run in a nonroot container with no host-directory mounts or credentials. A named `/workspace` volume retains files when stopped. Terminal networking is disabled; public web access uses the browser worker. Commands have a 30-second limit and saved output/exit receipts. **Files** supports folders, text editing, and PDF transfer to/from Documents. This is a Linux container, not a full operating-system VM. [Setup, Colima option, and boundaries](docs/COMPUTER.md).
 
+### Self-hosting anywhere
+
+To run OpenMuse on an always-on Linux machine and reach it from anywhere through a Cloudflare Tunnel with Cloudflare Access in front, use `infra/compose.home.yaml`. [Setup guide](docs/DEPLOY-HOME.md).
+
 ### Application storage
 
 By default, embedded PGlite, documents and the signing key live in `.openmuse/`; browser profiles live in `.openmuse/browser-profiles/`. Keep that directory private and back it up. The API hosts the task worker. The host must remain running for background work.

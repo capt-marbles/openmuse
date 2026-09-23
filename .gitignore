@@ -11,3 +11,4 @@ apps/mobile/android/
 .DS_Store
 *.tsbuildinfo
 artifacts/
+.openmuse-home/

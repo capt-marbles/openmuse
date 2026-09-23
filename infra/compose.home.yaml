@@ -1,0 +1,103 @@
+# Self-hosted OpenMuse behind a Cloudflare Tunnel. Nothing listens on the LAN
+# except the UI on 127.0.0.1:8080 for local use. See docs/DEPLOY-HOME.md.
+name: openmuse
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+      target: api
+      args:
+        PUBLIC_URL: ${PUBLIC_API_URL:?Set PUBLIC_API_URL to https://your-hostname}
+    restart: unless-stopped
+    env_file: ../.env
+    environment:
+      WORKSPACE_MODE: live
+      HOST: 0.0.0.0
+      PORT: "8787"
+      DATA_DIR: /data
+      DATABASE_URL: postgres://openmuse:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/openmuse
+      BROWSER_WORKER_URL: http://browser-worker:8790
+      TASK_WORKER_ENABLED: "true"
+      # The Linux computer needs the Docker socket; keep it off in this deployment.
+      COMPUTER_ENABLED: "false"
+    volumes:
+      - ${OPENMUSE_DATA_DIR:-../.openmuse-home}:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      browser-worker:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+      target: web
+      args:
+        PUBLIC_URL: ${PUBLIC_API_URL}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:80"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: openmuse
+      POSTGRES_DB: openmuse
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "openmuse"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  browser-worker:
+    build:
+      context: ../apps/worker
+    init: true
+    restart: unless-stopped
+    environment:
+      WORKER_HOST: 0.0.0.0
+      WORKER_TOKEN: ${WORKER_TOKEN:?Set WORKER_TOKEN to a random secret of at least 32 characters}
+    volumes:
+      - browser-profiles:/data
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    shm_size: 256mb
+    mem_limit: 2g
+    pids_limit: 256
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8790/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?Set CLOUDFLARE_TUNNEL_TOKEN from the Cloudflare dashboard}
+    depends_on:
+      - web
+
+volumes:
+  postgres:
+  browser-profiles:
