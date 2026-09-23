@@ -55,7 +55,7 @@ The computer combines **persistent Chromium and an optional Linux workspace**. T
 | **Finance** | Import transaction CSV to create a spending summary with categories, transactions, and a savings-goal action. |
 | **Gmail & Calendar** | Google OAuth adapters, complete mail threads, drafts/attachments, calendar discovery, and reviewed event creation/update/deletion. Live credentials required. |
 | **Personal context** | Editable name, tone, avatar, and memories. Background-update preferences and durable in-app notifications. |
-| **Conversations** | A local main conversation stored in PGlite/PostgreSQL by default. Optional CopilotKit Intelligence adds side chats, renaming, archiving, restoring, and cross-device replay. |
+| **Conversations** | A stable main conversation plus side chats with renaming, archiving, restoring and replay, stored in PGlite/PostgreSQL. CopilotKit Intelligence can optionally host them instead. |
 
 The [feature inventory](docs/FEATURES.md) describes implemented capabilities and planned extensions. Health/bank/social connectors, device push, voice, generated executable tools, and automatic reservations/payments are on the [roadmap](ROADMAP.md).
 
@@ -132,9 +132,9 @@ For a separate task worker, configure the same `DATABASE_URL`, secrets and share
 
 No hidden retry occurs after an uncertain external write. Review its provider outcome before creating a replacement. Pausing/cancelling prevents subsequent task steps; an already approved in-flight provider request may finish.
 
-## CopilotKit Rich Threads (optional)
+## Conversations and optional CopilotKit Intelligence
 
-By default, OpenMuse keeps one main conversation in its own database and needs no hosted service. To enable CopilotKit Intelligence for side chats, the thread menu and cross-device replay, create or select a project with `npx copilotkit@latest login` and `npx copilotkit@latest project select`, set `CPK_INTELLIGENCE_API_KEY` on the API server, and restart. The native menu then uses `useThreads`; rich tool results link back to saved tasks, documents, and browser sessions.
+By default, conversations live in OpenMuse's own database through a durable local thread runner: the main chat, side chats, rename/archive/restore and replay all work without a hosted service. To host threads on CopilotKit Intelligence instead, create or select a project with `npx copilotkit@latest login` and `npx copilotkit@latest project select`, set `CPK_INTELLIGENCE_API_KEY` on the API server, and restart. The native menu then uses `useThreads`; rich tool results link back to saved tasks, documents, and browser sessions.
 
 Intelligence is a separate service and is not included in this repository's MIT license. No project key is shipped. [Configuration and validation boundaries](docs/RICH-THREADS.md).
 
@@ -144,7 +144,9 @@ Intelligence is a separate service and is not included in this repository's MIT 
 flowchart TD
   Client[Expo / React Native / Web] -->|AG-UI and authenticated API| API[Hono + CopilotKit runtime]
   API --> Tasks[Durable task worker]
-  API -. optional .-> Threads[CopilotKit Intelligence]
+  API --> Threads[Local thread runner]
+  Threads --> Store
+  API -. optional .-> Intelligence[CopilotKit Intelligence]
   API --> Store[(PGlite or PostgreSQL)]
   Tasks --> Store
   Tasks --> Review[Stored action review]

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { MessageSchema } from "@ag-ui/core";
+import { type Message, MessageSchema } from "@ag-ui/core";
 import { CopilotKitIntelligence } from "@copilotkit/runtime/v2";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -19,6 +19,7 @@ import { AgentService } from "./engine/service.ts";
 import { AppError } from "./errors.ts";
 import { Files } from "./files.ts";
 import { GoogleAuth } from "./google-auth.ts";
+import { LocalThreadRunner } from "./thread-store.ts";
 import { WorkspaceService } from "./workspace.ts";
 
 export async function createApp(
@@ -40,10 +41,13 @@ export async function createApp(
   const browser = new BrowserService(db, config, auth, files);
   const computer = new ComputerService(db, config, options.docker);
   const agent = new AgentService(db, config, workspace, files, actions, browser, computer);
-  const intelligence = config.intelligenceApiKey
-    ? new CopilotKitIntelligence({ apiKey: config.intelligenceApiKey })
-    : undefined;
-  const runtime = makeRuntime(config, agent, auth, intelligence);
+  // Without CopilotKit Intelligence, conversations persist in the OpenMuse store.
+  const threadBackend = config.intelligenceApiKey
+    ? { intelligence: new CopilotKitIntelligence({ apiKey: config.intelligenceApiKey }) }
+    : { runner: await LocalThreadRunner.open(db) };
+  const intelligence = "intelligence" in threadBackend ? threadBackend.intelligence : undefined;
+  const threads = "runner" in threadBackend ? threadBackend.runner : undefined;
+  const runtime = makeRuntime(config, agent, auth, threadBackend);
   const app = new Hono<{ Variables: { owner: string } }>();
   const origins = new Set([...config.allowedOrigins, new URL(config.publicUrl).origin]);
   app.use("*", async (c, next) => {
@@ -203,6 +207,12 @@ export async function createApp(
     });
     const main = await db.get<{ threadId: string }>(owner, "conversation-settings", "main");
     if (!main) throw new AppError("Main conversation could not be loaded", 503);
+    if (threads) {
+      // Carry over the single conversation stored before local threads existed.
+      const legacy = await db.get<{ messages: Message[] }>(owner, "conversations", "default");
+      if (legacy?.messages.length) await threads.importMessages(main.threadId, legacy.messages);
+      return c.json({ threadId: main.threadId, existing: threads.hasHistory(main.threadId) });
+    }
     if (intelligence) {
       try {
         await intelligence.getOrCreateThread({
@@ -219,6 +229,37 @@ export async function createApp(
     }
     return c.json({ threadId: main.threadId, existing: Boolean(intelligence) });
   });
+  if (threads) {
+    // CopilotKit only serves thread mutations through Intelligence; the local store owns them here.
+    const thread = (id: string) => {
+      const found = threads.getThread(id);
+      if (!found) throw new AppError("Conversation not found", 404);
+      return found;
+    };
+    app.patch("/api/copilotkit/threads/:id", async (c) => {
+      thread(c.req.param("id"));
+      const body = z
+        .object({
+          name: z.string().trim().min(1).max(200).optional(),
+          archived: z.boolean().optional(),
+        })
+        .parse(await c.req.json());
+      return c.json(await threads.updateThread(c.req.param("id"), body));
+    });
+    app.post("/api/copilotkit/threads/:id/archive", async (c) => {
+      thread(c.req.param("id"));
+      return c.json(await threads.updateThread(c.req.param("id"), { archived: true }));
+    });
+    app.delete("/api/copilotkit/threads/:id", async (c) => {
+      thread(c.req.param("id"));
+      try {
+        await threads.deleteThread(c.req.param("id"));
+      } catch (error) {
+        throw new AppError(error instanceof Error ? error.message : "Could not delete", 409);
+      }
+      return c.body(null, 204);
+    });
+  }
   app.get("/api/conversation", async (c) =>
     c.json((await db.get(c.get("owner"), "conversations", "default")) ?? { messages: [] }),
   );
@@ -326,7 +367,13 @@ export async function createApp(
         "Configure a model and provider API key, or a valid AG-UI endpoint, to start chat",
         503,
       );
-    const response = await runtime.fetch(c.req.raw);
+    let response = await runtime.fetch(c.req.raw);
+    if (threads && c.req.path === "/api/copilotkit/info" && response.ok) {
+      // The local store serves rename/archive/delete above, so advertise them to useThreads.
+      const info = await response.json();
+      info.threadEndpoints = { ...info.threadEndpoints, mutations: true };
+      response = Response.json(info, { status: response.status });
+    }
     // Runtime 1.70 emits SSE strings; a WHATWG Response body requires byte chunks.
     const encoder = new TextEncoder();
     const body = response.body?.pipeThrough(
@@ -341,5 +388,5 @@ export async function createApp(
   app.get("/", (c) =>
     c.json({ name: "OpenMuse", app: "http://localhost:8081", health: "/api/health" }),
   );
-  return { app, auth, files, actions, workspace, agent, computer };
+  return { app, auth, files, actions, workspace, agent, computer, threads };
 }

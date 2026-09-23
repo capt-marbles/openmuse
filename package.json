@@ -32,6 +32,7 @@
     "@ag-ui/client": "0.0.59",
     "@ag-ui/core": "0.0.59",
     "@copilotkit/runtime": "1.70.1",
+    "@copilotkit/shared": "1.70.1",
     "@electric-sql/pglite": "^0.3.14",
     "@hono/node-server": "^1.19.0",
     "hono": "^4.11.4",

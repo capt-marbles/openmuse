@@ -4,7 +4,11 @@ OpenMuse uses `@copilotkit/react-native/headless` for its custom native and web 
 
 ## Rich Threads
 
-Rich Threads are optional. Without a CopilotKit Intelligence project key, the API stores one main conversation locally through `/api/conversation` and the thread menu is hidden. To enable Rich Threads, create or select a project:
+Without a CopilotKit Intelligence project key, the API runs CopilotKit in SSE mode with `LocalThreadRunner` (`apps/server/src/thread-store.ts`). It implements the runtime's local thread endpoint contract (list, messages, events, state and `/connect` replay) and writes every finished run to the OpenMuse store (`chat-threads` and `chat-runs` records), so the thread menu, side chats and replay behave as they do with Intelligence and survive restarts. CopilotKit serves rename/archive/delete only through Intelligence, so OpenMuse handles `PATCH`/`DELETE /api/copilotkit/threads/:id` and `POST .../archive` itself and advertises `threadEndpoints.mutations` in `/info`. `POST /threads/clear` is a no-op. A conversation saved by earlier versions under `/api/conversation` is imported into the main thread on first load.
+
+The runner depends on CopilotKit's internal `ɵsupportsLocalThreadEndpoints` contract, so `@copilotkit/runtime` is pinned; `tests/local-threads.test.ts` exercises it through the real runtime. The API must run as a single instance because thread reads are served from an in-process index.
+
+To host threads on CopilotKit Intelligence instead, create or select a project:
 
 ```sh
 npx copilotkit@latest login

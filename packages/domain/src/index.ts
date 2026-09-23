@@ -184,6 +184,7 @@ export interface Workspace {
     configured: boolean;
     openbotConfigured: boolean;
     richThreads?: boolean;
+    threadStore?: "intelligence" | "local";
   };
 }
 

@@ -323,7 +323,9 @@ export class WorkspaceService {
         provider: this.config.agentBackend === "sample" ? "sample" : "model",
         configured: agentConfigured(this.config),
         openbotConfigured: false,
-        richThreads: Boolean(this.config.intelligenceApiKey),
+        // Side chats and replay are always available; only the backing store differs.
+        richThreads: true,
+        threadStore: this.config.intelligenceApiKey ? "intelligence" : "local",
       },
     };
   }
