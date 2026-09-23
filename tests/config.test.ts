@@ -1,48 +1,46 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { assertApiDeploymentConfig, type Config } from "../apps/server/src/config.ts";
+import { readConfig } from "../apps/server/src/config.ts";
 
-const sampleConfig: Config = {
-  mode: "sample",
-  port: 8787,
-  host: "127.0.0.1",
-  publicUrl: "http://localhost:8787",
-  dataDir: ".openmuse",
-  agentBackend: "sample",
-  googleRedirectUri: "http://localhost:8787/api/google/callback",
-  allowedOrigins: ["http://localhost:8081"],
-};
-
-function liveConfig(intelligenceApiKey?: string): Config {
-  return {
-    ...sampleConfig,
-    mode: "live",
-    agentBackend: "model",
-    intelligenceApiKey,
-  };
+function withEnv<T>(env: Record<string, string | undefined>, run: () => T): T {
+  const previous = Object.fromEntries(Object.keys(env).map((key) => [key, process.env[key]]));
+  for (const [key, value] of Object.entries(env)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+  try {
+    return run();
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
 }
 
-const missingKeyMessage =
-  "OpenMuse requires CPK_INTELLIGENCE_API_KEY. " +
-  "Run `npx copilotkit@latest login` and `npx copilotkit@latest project select`, " +
-  "then set the generated server-only key. " +
-  "See https://docs.copilotkit.ai/intelligence/connect-your-runtime";
+const sample = { WORKSPACE_MODE: "sample", AGENT_BACKEND: "sample" };
+const live = {
+  WORKSPACE_MODE: "live",
+  AGENT_BACKEND: "model",
+  OPENMUSE_ACCESS_KEY: "a".repeat(32),
+  TOKEN_ENCRYPTION_KEY: Buffer.alloc(32).toString("base64"),
+};
 
-test("every API mode rejects a missing or blank Intelligence key", () => {
-  for (const mode of [sampleConfig, liveConfig()]) {
+test("every mode starts without an Intelligence key", () => {
+  for (const mode of [sample, live]) {
     for (const key of [undefined, "", " \t\n"]) {
-      assert.throws(() => assertApiDeploymentConfig({ ...mode, intelligenceApiKey: key }), {
-        name: "Error",
-        message: missingKeyMessage,
-      });
+      const config = withEnv({ ...mode, CPK_INTELLIGENCE_API_KEY: key }, readConfig);
+      assert.equal(config.intelligenceApiKey, undefined);
     }
   }
 });
 
-test("every API mode accepts a non-empty Intelligence key", () => {
-  for (const mode of [sampleConfig, liveConfig()]) {
-    assert.doesNotThrow(() =>
-      assertApiDeploymentConfig({ ...mode, intelligenceApiKey: "test-project-key-never-sent" }),
+test("a configured Intelligence key is trimmed and kept", () => {
+  for (const mode of [sample, live]) {
+    const config = withEnv(
+      { ...mode, CPK_INTELLIGENCE_API_KEY: " test-project-key-never-sent\n" },
+      readConfig,
     );
+    assert.equal(config.intelligenceApiKey, "test-project-key-never-sent");
   }
 });
