@@ -19,7 +19,11 @@ function botRunnable(config: Config, bot: Bot) {
     config.agentBackend === "sample" ||
     Boolean(
       config.model &&
-        (process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.GOOGLE_API_KEY),
+        // chatgpt/ models use the ChatGPT sign-in, checked when a request is made.
+        (config.model.startsWith("chatgpt/") ||
+          process.env.OPENAI_API_KEY ||
+          process.env.ANTHROPIC_API_KEY ||
+          process.env.GOOGLE_API_KEY),
     )
   );
 }

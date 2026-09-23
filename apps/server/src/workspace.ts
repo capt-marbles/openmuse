@@ -326,6 +326,7 @@ export class WorkspaceService {
         // Side chats and replay are always available; only the backing store differs.
         richThreads: true,
         threadStore: this.config.intelligenceApiKey ? "intelligence" : "local",
+        model: this.config.model,
         bots: runnableBots(this.config).map((bot) => ({
           id: bot.id,
           name: bot.name,

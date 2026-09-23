@@ -6,6 +6,7 @@ import { z } from "zod";
 import type { AgentTask } from "../../../../packages/domain/src/agent.ts";
 import { emailDraftSchema, eventDraftSchema } from "../../../../packages/domain/src/index.ts";
 import { botOf, hasTool } from "../bots.ts";
+import { modelSettings } from "../chatgpt.ts";
 import { computerInstructions, computerTools } from "../computer-tools.ts";
 import {
   botGuidance,
@@ -347,7 +348,7 @@ export async function executeModelTask(
   );
   const memories = await service.db.list<{ text: string; source: string }>(owner, "memories");
   const agent = new BuiltInAgent({
-    model: config.model,
+    ...modelSettings(config, service.chatgpt),
     maxSteps: 16,
     maxRetries: 0,
     tools: tools.filter((t) => {

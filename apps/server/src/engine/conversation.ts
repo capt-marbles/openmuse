@@ -11,6 +11,7 @@ import {
   monitorInputSchema,
 } from "../../../../packages/domain/src/agent.ts";
 import { type Bot, botOf } from "../bots.ts";
+import { modelSettings } from "../chatgpt.ts";
 import { computerInstructions, computerTools } from "../computer-tools.ts";
 import type { Config } from "../config.ts";
 import type { AgentService } from "./service.ts";
@@ -217,7 +218,7 @@ export class ConversationAgent extends AbstractAgent {
       }),
     ];
     const agent = new BuiltInAgent({
-      model: this.config.model ?? "openai/unconfigured",
+      ...modelSettings(this.config, this.service.chatgpt),
       maxSteps: 6,
       maxRetries: 0,
       tools,

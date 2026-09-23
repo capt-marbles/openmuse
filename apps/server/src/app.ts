@@ -10,6 +10,7 @@ import { ActionService } from "./actions.ts";
 import { agentConfigured, makeRuntime } from "./agent.ts";
 import { createAuth } from "./auth.ts";
 import { BrowserService } from "./browser.ts";
+import { ChatGPTAuth } from "./chatgpt.ts";
 import { ComputerService, type DockerRunner } from "./computer.ts";
 import { computerRoutes } from "./computer-routes.ts";
 import type { Config } from "./config.ts";
@@ -44,6 +45,8 @@ export async function createApp(
   const browser = new BrowserService(db, config, auth, files);
   const computer = new ComputerService(db, config, options.docker);
   const agent = new AgentService(db, config, workspace, files, actions, browser, computer);
+  const chatgpt = new ChatGPTAuth(db, config);
+  agent.chatgpt = chatgpt;
   // Without CopilotKit Intelligence, conversations persist in the OpenMuse store.
   const threadBackend = config.intelligenceApiKey
     ? { intelligence: new CopilotKitIntelligence({ apiKey: config.intelligenceApiKey }) }
@@ -200,6 +203,16 @@ export async function createApp(
       }),
       201,
     );
+  });
+  app.get("/api/chatgpt", async (c) => c.json(await chatgpt.status()));
+  app.post("/api/chatgpt/login", async (c) => c.json(await chatgpt.startLogin()));
+  app.delete("/api/chatgpt/login", async (c) => {
+    chatgpt.cancelLogin();
+    return c.json(await chatgpt.status());
+  });
+  app.delete("/api/chatgpt", async (c) => {
+    await chatgpt.disconnect();
+    return c.json(await chatgpt.status());
   });
   app.get("/api/main-thread", async (c) => {
     const owner = c.get("owner");
@@ -395,5 +408,5 @@ export async function createApp(
   app.get("/", (c) =>
     c.json({ name: "OpenMuse", app: "http://localhost:8081", health: "/api/health" }),
   );
-  return { app, auth, files, actions, workspace, agent, computer, threads };
+  return { app, auth, files, actions, workspace, agent, computer, threads, chatgpt };
 }

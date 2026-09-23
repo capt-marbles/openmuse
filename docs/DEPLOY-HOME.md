@@ -49,7 +49,7 @@ Set these in `.env`:
 PUBLIC_API_URL=https://open.example.com
 ALLOWED_ORIGINS=https://open.example.com
 OPENMUSE_DATA_DIR=/srv/openmuse
-MODEL=anthropic/your-model-id
+MODEL=anthropic/your-model-id   # or chatgpt/<model> and Sign in with ChatGPT in Apps
 ANTHROPIC_API_KEY=...
 OPENMUSE_ACCESS_KEY=...        # openssl rand -hex 24
 TOKEN_ENCRYPTION_KEY=...       # openssl rand -base64 32

@@ -108,7 +108,7 @@ Write `${NAME}` for secrets; the value comes from `.env` and is never stored in 
 
 Copy the commented settings in [.env.example](.env.example) into your private `.env`:
 
-1. Set `AGENT_BACKEND=model`, `MODEL=provider/model-id`, and the matching provider key. CopilotKit supports the configured OpenAI, Anthropic or Google provider. Fictional data can still be used with a real model. Provider keys stay on the server.
+1. Set `AGENT_BACKEND=model`, `MODEL=provider/model-id`, and the matching provider key. CopilotKit supports the configured OpenAI, Anthropic or Google provider. To use a ChatGPT Plus/Pro subscription instead of an API key, set `MODEL=chatgpt/<codex model id>` and `TOKEN_ENCRYPTION_KEY`, then choose **Apps → Sign in with ChatGPT**: OpenMuse shows a code to approve at auth.openai.com from any device, so it also works on a headless server. Requests go to the same backend the Codex CLI uses and count against your plan's Codex usage limits. Fictional data can still be used with a real model. Provider keys stay on the server.
 2. Optionally, enable [Rich Threads](#copilotkit-rich-threads-optional).
 3. For personal mail/calendar, set `WORKSPACE_MODE=live`, a random `OPENMUSE_ACCESS_KEY` of at least 24 characters, and `TOKEN_ENCRYPTION_KEY` containing 32 random bytes encoded as base64. Restart the API.
 4. Configure a Google OAuth web client with Gmail and Calendar APIs enabled. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`; register `${PUBLIC_API_URL}/api/google/callback` as its redirect URI. Configure consent/test-user access in your Google project.

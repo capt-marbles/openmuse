@@ -26,6 +26,7 @@ import type {
 import type { ActionService } from "../actions.ts";
 import { botOf } from "../bots.ts";
 import type { BrowserService } from "../browser.ts";
+import type { ChatGPTAuth } from "../chatgpt.ts";
 import { ComputerService } from "../computer.ts";
 import type { Config } from "../config.ts";
 import type { Store } from "../db.ts";
@@ -55,6 +56,8 @@ export class AgentService {
   readonly worker: TaskWorker;
   private maintenance?: ReturnType<typeof setInterval>;
   private refreshing = false;
+  /** Set by createApp; signs chatgpt/ model requests in with the user's subscription. */
+  chatgpt?: ChatGPTAuth;
   constructor(
     readonly db: Store,
     readonly config: Config,

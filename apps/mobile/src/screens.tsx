@@ -39,6 +39,7 @@ import type {
   EmailDraft,
 } from "../../../packages/domain/src";
 import { API_URL } from "./api";
+import { ChatGPTConnection } from "./chatgpt";
 import { localDateTime, zonedInstant } from "./date-time";
 import {
   Button,
@@ -1349,6 +1350,7 @@ export function ConnectionsScreen({ query = "" }: { query?: string }) {
                       : "Model not configured"
                 }
               />
+              <ChatGPTConnection />
               <SettingsLine
                 label="Conversations"
                 value={
