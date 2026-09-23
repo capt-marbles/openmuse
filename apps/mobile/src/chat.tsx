@@ -178,7 +178,11 @@ export function ChatScreen({
   const selection = thread || { id: "local", existing: false };
   const threadId = richThreads ? selection.id : "local-main";
   const agentId = `openmuse-${threadId}`;
-  const { agent, isReady } = useAgent({ agentId, runtimeAgentId: "default", threadId });
+  const { agent, isReady } = useAgent({
+    agentId,
+    runtimeAgentId: selection.agentId ?? "default",
+    threadId,
+  });
   const { copilotkit } = useCopilotKit();
   const renderToolCall = useRenderToolCall();
   const [draft, setDraft] = useState("");

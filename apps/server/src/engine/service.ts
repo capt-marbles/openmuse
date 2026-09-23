@@ -24,6 +24,7 @@ import type {
   ProposalInput,
 } from "../../../../packages/domain/src/index.ts";
 import type { ActionService } from "../actions.ts";
+import { botOf } from "../bots.ts";
 import type { BrowserService } from "../browser.ts";
 import { ComputerService } from "../computer.ts";
 import type { Config } from "../config.ts";
@@ -39,6 +40,17 @@ import { LostLeaseError, type TaskContext, TaskWorker } from "./worker.ts";
 const hash = (text: string) => createHash("sha256").update(text).digest("hex");
 const date = () => new Date().toISOString();
 const terminal = new Set(["succeeded", "failed", "cancelled"]);
+export interface Delegation {
+  taskId: string;
+  botId: string;
+  brief: string;
+  status: "pending" | "succeeded" | "failed" | "cancelled";
+  result?: string;
+}
+export const delegationsOf = (task: AgentTask) =>
+  Array.isArray(task.state.delegations) ? (task.state.delegations as Delegation[]) : [];
+export const pendingDelegations = (task: AgentTask) =>
+  delegationsOf(task).filter((item) => item.status === "pending");
 export class AgentService {
   readonly worker: TaskWorker;
   private maintenance?: ReturnType<typeof setInterval>;
@@ -177,8 +189,15 @@ export class AgentService {
       ),
     };
   }
-  async createTask(owner: string, raw: unknown, idempotencyKey?: string, held = false) {
+  async createTask(
+    owner: string,
+    raw: unknown,
+    idempotencyKey?: string,
+    held = false,
+    links?: { parentId: string; depth: number },
+  ) {
     const input = createTaskSchema.parse(raw);
+    if (input.botId) botOf(this.config, input.botId);
     if (input.goalId && !(await this.db.get(owner, "goals", input.goalId)))
       throw new AppError("Goal not found", 404);
     const id = idempotencyKey ? hash(`task:${idempotencyKey}`) : randomUUID();
@@ -209,6 +228,8 @@ export class AgentService {
       prompt: input.prompt,
       kind: input.kind,
       goalId: input.goalId,
+      ...(input.botId && input.botId !== "default" ? { botId: input.botId } : {}),
+      ...(links ? { parentId: links.parentId, depth: links.depth } : {}),
       status: held ? "paused" : "queued",
       plan: titles.map((title, i) => ({ id: String(i), title, status: "pending" })),
       evidence: [],
@@ -244,7 +265,9 @@ export class AgentService {
           ? "paused"
           : task.actionId
             ? "waiting_approval"
-            : "queued";
+            : pendingDelegations(task).length
+              ? "waiting_delegate"
+              : "queued";
     if (action === "retry" && task.actionId) {
       const a = await this.db.get<ActionProposal>(owner, "actions", task.actionId);
       if (a && a.status !== "succeeded")
@@ -288,6 +311,12 @@ export class AgentService {
           nextCheckAt: date(),
         },
       );
+    if (action === "cancel") {
+      // Work assigned by this task stops with it; a stopped child lets its parent continue.
+      for (const child of await this.children(owner, id))
+        if (!terminal.has(child.status)) await this.control(owner, child.id, "cancel");
+      if (task.parentId) await this.settleParent(owner, task.parentId);
+    }
     if (action === "cancel" && task.actionId) {
       const proposal = await this.db.get<ActionProposal>(owner, "actions", task.actionId);
       if (proposal?.status === "awaiting_review")
@@ -619,7 +648,7 @@ export class AgentService {
   ) {
     await context.guard();
     const connection = await this.workspace.connection(owner);
-    if (connection?.id !== task.state.connectionId)
+    if (input.kind !== "mcp.call" && connection?.id !== task.state.connectionId)
       throw new AppError(
         "Google connection changed during this task. Start a new task using the current account.",
         409,
@@ -635,7 +664,9 @@ export class AgentService {
     await context.event(
       "approval",
       proposal.title,
-      `Review prepared for ${proposal.account ?? "the connected account"}`,
+      proposal.kind === "mcp.call"
+        ? `Review prepared for ${proposal.title}`
+        : `Review prepared for ${proposal.account ?? "the connected account"}`,
     );
     return proposal;
   }
@@ -746,8 +777,57 @@ export class AgentService {
       plan: task.plan.map((s) => ({ ...s, status: "succeeded" as const })),
     };
   }
+  async children(owner: string, parentId: string) {
+    return (await this.db.list<AgentTask>(owner, "tasks")).filter((t) => t.parentId === parentId);
+  }
+  /** Delegation outcomes derived from the child tasks, which are the source of truth. */
+  async delegationStatus(owner: string, parent: AgentTask): Promise<Delegation[]> {
+    const children = await this.children(owner, parent.id);
+    return delegationsOf(parent).map((item) => {
+      const child = children.find((c) => c.id === item.taskId);
+      if (!child || !terminal.has(child.status)) return { ...item, status: "pending" as const };
+      return {
+        ...item,
+        status: child.status as Delegation["status"],
+        result: (child.status === "succeeded" ? child.result : (child.error ?? child.result)) ?? "",
+      };
+    });
+  }
+  /** Records child outcomes on the parent and requeues it once every child has finished. */
+  async settleParent(owner: string, parentId: string) {
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const parent = await this.db.get<AgentTask>(owner, "tasks", parentId);
+      if (!parent) return;
+      const delegations = await this.delegationStatus(owner, parent);
+      const done = delegations.every((item) => item.status !== "pending");
+      const resume = done && parent.status === "waiting_delegate";
+      const updated = await this.db.compareAndSwap<AgentTask>(
+        owner,
+        "tasks",
+        parentId,
+        { status: parent.status, updatedAt: parent.updatedAt },
+        {
+          state: { ...parent.state, delegations },
+          updatedAt: date(),
+          ...(resume ? { status: "queued" } : {}),
+        },
+      );
+      if (!updated) continue;
+      if (resume)
+        await this.db.put(owner, "run-events", {
+          id: randomUUID(),
+          taskId: parentId,
+          kind: "status",
+          date: date(),
+          title: "Delegated work returned",
+          detail: delegations.map((d) => `${d.botId}: ${d.status}`).join(", "),
+        });
+      return;
+    }
+  }
   private async publishOutcome(owner: string, saved: AgentTask) {
     const task = await this.getTask(owner, saved.id);
+    if (task.parentId && terminal.has(task.status)) await this.settleParent(owner, task.parentId);
     if (task.status === "succeeded") {
       await this.notify(
         owner,

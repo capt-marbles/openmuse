@@ -21,7 +21,7 @@ function newThreadId() {
   const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
-export type Selection = { id: string; existing: boolean };
+export type Selection = { id: string; existing: boolean; agentId?: string };
 const ThreadContext = createContext<{
   enabled: boolean;
   selection: Selection;
@@ -31,7 +31,7 @@ const ThreadContext = createContext<{
   error: string;
   retry: () => void;
   select: (selection: Selection) => void;
-  start: () => void;
+  start: (agentId?: string) => void;
   claimPrompt: (id: number) => boolean;
 } | null>(null);
 export function ThreadsProvider({ children }: { children: ReactNode }) {
@@ -87,7 +87,7 @@ export function ThreadsProvider({ children }: { children: ReactNode }) {
         retry: () => setAttempt((n) => n + 1),
         selection,
         select,
-        start: () => select({ id: newThreadId(), existing: false }),
+        start: (agentId) => select({ id: newThreadId(), existing: false, agentId }),
       }}
     >
       {children}
@@ -112,6 +112,9 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
     start,
   } = useMuseThread();
   const { workspace, open, navigate, refresh } = useWorkspace();
+  const agents = workspace.runtime.bots ?? [];
+  const agentName = (id?: string) =>
+    id && id !== "default" ? (agents.find((agent) => agent.id === id)?.name ?? id) : undefined;
   const threads = useThreads({ agentId: "default", enabled, includeArchived: true, limit: 20 });
   const [editing, setEditing] = useState<string>();
   const [name, setName] = useState("");
@@ -167,6 +170,20 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
             >
               New side chat
             </Button>
+            {agents
+              .filter((agent) => agent.id !== "default")
+              .map((agent) => (
+                <Button
+                  key={agent.id}
+                  icon={Plus}
+                  onPress={() => {
+                    start(agent.id);
+                    onClose();
+                  }}
+                >
+                  {`New chat with ${agent.name}`}
+                </Button>
+              ))}
             <View style={[s.between, { marginTop: 12 }]}>
               <Text style={s.heading}>Side chats</Text>
               <Button small onPress={() => setArchived(!archived)}>
@@ -190,7 +207,7 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
                   <LinkRow
                     key={item.id}
                     icon={MessageCircle}
-                    title={`Side chat ${index + 1}`}
+                    title={agentName(item.agentId) ?? `Side chat ${index + 1}`}
                     detail="Open in this app"
                     onPress={() => {
                       select(item);
@@ -215,7 +232,7 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
                     accessibilityLabel={`Open conversation: ${thread.name || "Untitled conversation"}`}
                     accessibilityState={{ selected: selection.id === thread.id }}
                     onPress={() => {
-                      select({ id: thread.id, existing: true });
+                      select({ id: thread.id, existing: true, agentId: thread.agentId });
                       onClose();
                     }}
                     style={[s.row, { gap: 10 }]}
@@ -224,6 +241,9 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
                     <Text style={[s.text, { flex: 1 }]}>
                       {thread.name || "Untitled conversation"}
                     </Text>
+                    {agentName(thread.agentId) && (
+                      <Text style={s.small}>{agentName(thread.agentId)}</Text>
+                    )}
                   </Pressable>
                   {editing === thread.id && (
                     <Field label="Conversation name" value={name} onChangeText={setName} />

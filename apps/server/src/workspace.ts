@@ -12,7 +12,7 @@ import type {
 import { GoogleClient } from "../../../packages/integrations/src/google.ts";
 import { createSamplePdf } from "../../../packages/integrations/src/pdf.ts";
 import type { ActionService } from "./actions.ts";
-import { agentConfigured } from "./agent.ts";
+import { agentConfigured, runnableBots } from "./agent.ts";
 import type { Config } from "./config.ts";
 import type { Store } from "./db.ts";
 import { AppError } from "./errors.ts";
@@ -326,10 +326,17 @@ export class WorkspaceService {
         // Side chats and replay are always available; only the backing store differs.
         richThreads: true,
         threadStore: this.config.intelligenceApiKey ? "intelligence" : "local",
+        bots: runnableBots(this.config).map((bot) => ({
+          id: bot.id,
+          name: bot.name,
+          description: bot.description,
+          remote: Boolean(bot.remote),
+        })),
       },
     };
   }
   async prepare(owner: string, input: ProposalInput, connectionId?: string) {
+    if (input.kind === "mcp.call") return { input };
     if (input.kind === "email.send") {
       for (const id of input.data.attachmentIds) await this.files.get(owner, id);
       return { input };
@@ -354,6 +361,7 @@ export class WorkspaceService {
     connectionId?: string,
     targetVersion?: string,
   ): Promise<string> {
+    if (input.kind === "mcp.call") throw new Error("Bot tool calls run through the bot toolbox");
     if (this.config.mode === "sample") {
       if (input.kind === "email.send") {
         const id = randomUUID();

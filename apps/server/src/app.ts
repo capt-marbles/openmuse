@@ -19,6 +19,7 @@ import { AgentService } from "./engine/service.ts";
 import { AppError } from "./errors.ts";
 import { Files } from "./files.ts";
 import { GoogleAuth } from "./google-auth.ts";
+import { runMcpAction } from "./mcp.ts";
 import { LocalThreadRunner } from "./thread-store.ts";
 import { WorkspaceService } from "./workspace.ts";
 
@@ -33,7 +34,9 @@ export async function createApp(
     workspace = new WorkspaceService(db, config, files, google);
   const actions = new ActionService(db, {
     execute: (owner, input, connectionId, targetVersion) =>
-      workspace.execute(owner, input, connectionId, targetVersion),
+      input.kind === "mcp.call"
+        ? runMcpAction(config, input.data)
+        : workspace.execute(owner, input, connectionId, targetVersion),
     prepare: (owner, input, connectionId) => workspace.prepare(owner, input, connectionId),
     connected: (owner) => workspace.connected(owner),
     connection: (owner) => workspace.connection(owner),
@@ -236,6 +239,10 @@ export async function createApp(
       if (!found) throw new AppError("Conversation not found", 404);
       return found;
     };
+    // The runtime filters local threads by agent; one menu lists every agent's conversations.
+    app.get("/api/copilotkit/threads", (c) =>
+      c.json({ threads: threads.listThreads(), nextCursor: null }),
+    );
     app.patch("/api/copilotkit/threads/:id", async (c) => {
       thread(c.req.param("id"));
       const body = z

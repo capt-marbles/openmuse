@@ -5,6 +5,7 @@ export type TaskStatus =
   | "running"
   | "waiting_approval"
   | "waiting_input"
+  | "waiting_delegate"
   | "scheduled"
   | "paused"
   | "succeeded"
@@ -29,6 +30,11 @@ export interface AgentTask {
   prompt: string;
   kind: "agent" | "document" | "monitor" | "finance" | "plan";
   status: TaskStatus;
+  /** The bot doing the work; absent means the default bot. */
+  botId?: string;
+  /** Set when another bot's task assigned this work. */
+  parentId?: string;
+  depth?: number;
   goalId?: string;
   plan: TaskStep[];
   evidence: Evidence[];
@@ -137,6 +143,7 @@ export const createTaskSchema = z.object({
   kind: z.enum(["agent", "document", "monitor", "finance", "plan"]).default("agent"),
   goalId: z.string().optional(),
   input: z.record(z.string(), z.unknown()).default({}),
+  botId: z.string().optional(),
 });
 export type CreateTaskInput = z.infer<typeof createTaskSchema>;
 export const monitorInputSchema = z

@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
+import { type Bot, loadBots } from "./bots.ts";
 
 if (existsSync(".env")) process.loadEnvFile(".env");
 process.env.DO_NOT_TRACK ??= "1";
@@ -18,6 +19,8 @@ export interface Config {
   agentBackend: "sample" | "model" | "agui";
   agentUrl?: string;
   agentToken?: string;
+  /** Bots by id; `default` serves the main chat. Derived from AGENT_BACKEND when unset. */
+  bots?: Bot[];
   intelligenceApiKey?: string;
   googleClientId?: string;
   googleClientSecret?: string;
@@ -55,6 +58,11 @@ export function readConfig(): Config {
     agentBackend: backend,
     agentUrl: process.env.AGENT_URL,
     agentToken: process.env.AGENT_TOKEN,
+    bots: loadBots(
+      resolve(process.env.BOTS_FILE ?? `${process.env.DATA_DIR ?? ".openmuse"}/bots.json`),
+      process.env,
+      backend,
+    ),
     // Optional: without a key, conversations use the local store instead of Rich Threads.
     intelligenceApiKey: process.env.CPK_INTELLIGENCE_API_KEY?.trim() || undefined,
     googleClientId: process.env.GOOGLE_CLIENT_ID,

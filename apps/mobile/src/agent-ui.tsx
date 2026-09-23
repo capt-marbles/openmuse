@@ -54,7 +54,16 @@ import {
 import { useWorkspace } from "./workspace";
 
 export function statusLabel(value: string) {
+  if (value === "waiting_delegate") return "Waiting on other bots";
   return value.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
+}
+function useBotName() {
+  const { workspace } = useWorkspace();
+  // The default bot is only named when bots.json gives it a role such as Chief of Staff.
+  return (botId = "default") => {
+    const name = workspace.runtime.bots?.find((bot) => bot.id === botId)?.name ?? botId;
+    return botId === "default" && name === "OpenMuse" ? undefined : name;
+  };
 }
 function stamp(value?: string) {
   return value
@@ -100,6 +109,7 @@ export function TaskCard({
   onOpen?: () => void;
 }) {
   const { open } = useWorkspace();
+  const botName = useBotName()(task.botId);
   const done = task.plan.filter((step) => step.status === "succeeded").length;
   const next = task.plan.find((step) => ["running", "waiting"].includes(step.status));
   const waiting = ["waiting_input", "waiting_approval"].includes(task.status);
@@ -132,6 +142,7 @@ export function TaskCard({
           <View style={{ flex: 1, gap: 4 }}>
             <Text style={s.heading}>{task.title}</Text>
             <Text style={s.small}>
+              {botName ? `${botName} · ` : ""}
               {statusLabel(task.status)}
               {task.plan.length ? ` · ${done}/${task.plan.length} steps` : ""}
             </Text>
@@ -282,6 +293,11 @@ export function TaskDetail({ taskId }: { taskId: string }) {
   const [showFieldJson, setShowFieldJson] = useState(false);
   const [fields, setFields] = useState<Record<string, string | boolean>>({});
   const task = data?.tasks.find((item) => item.id === taskId) || detail?.task;
+  const botName = useBotName();
+  const parent = task?.parentId ? data?.tasks.find((item) => item.id === task.parentId) : undefined;
+  const delegations = Array.isArray(task?.state.delegations)
+    ? (task.state.delegations as { taskId: string; botId: string; brief: string }[])
+    : [];
   useEffect(() => {
     let active = true;
     void api
@@ -385,10 +401,40 @@ export function TaskDetail({ taskId }: { taskId: string }) {
           <Text selectable style={s.text}>
             {task.prompt}
           </Text>
+          {task.parentId && (
+            <LinkRow
+              icon={ListChecks}
+              title={`Assigned by ${botName(parent?.botId) ?? "OpenMuse"}`}
+              detail={parent?.title ?? "Open the task that assigned this work"}
+              onPress={() => open({ type: "task", taskId: task.parentId as string })}
+            />
+          )}
+          {!!delegations.length && (
+            <View style={{ gap: 6 }}>
+              <Text style={s.label}>Assigned work</Text>
+              {delegations.map((item) => {
+                const child = data?.tasks.find((t) => t.id === item.taskId);
+                return (
+                  <LinkRow
+                    key={item.taskId}
+                    icon={ListChecks}
+                    title={`${botName(item.botId) ?? "OpenMuse"} · ${statusLabel(child?.status ?? "queued")}`}
+                    detail={child?.result || item.brief}
+                    onPress={() => open({ type: "task", taskId: item.taskId })}
+                  />
+                );
+              })}
+            </View>
+          )}
           <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
-            {["queued", "running", "scheduled", "waiting_input", "waiting_approval"].includes(
-              task.status,
-            ) && (
+            {[
+              "queued",
+              "running",
+              "scheduled",
+              "waiting_input",
+              "waiting_approval",
+              "waiting_delegate",
+            ].includes(task.status) && (
               <Button
                 small
                 icon={Pause}

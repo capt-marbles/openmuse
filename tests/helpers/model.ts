@@ -8,7 +8,7 @@ type ModelCall = { name: string; arguments: object };
 // Serve the provider protocol, leaving tool execution and AG-UI event emission to the real SDK.
 export async function modelFixture(
   t: TestContext,
-  reply: (index: number) => ModelCall | undefined | Promise<ModelCall | undefined>,
+  reply: (index: number, body: string) => ModelCall | undefined | Promise<ModelCall | undefined>,
 ) {
   const requests: { path: string; body: string }[] = [];
   const server = createServer(async (request, response) => {
@@ -16,7 +16,7 @@ export async function modelFixture(
     for await (const chunk of request) body += chunk;
     const index = requests.length;
     requests.push({ path: request.url ?? "", body });
-    const call = await reply(index);
+    const call = await reply(index, body);
     response.writeHead(200, { "Content-Type": "text/event-stream" });
     const emit = (type: string, value: object) =>
       response.write(`data: ${JSON.stringify({ type, ...value })}\n\n`);

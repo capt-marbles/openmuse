@@ -587,13 +587,16 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
     }
   }
   const email = action.kind === "email.send";
+  const mcp = action.kind === "mcp.call";
   return (
     <Sheet
       title={pending ? "One last look" : action.title}
       subtitle={
-        w.mode === "sample"
-          ? "This action stays in your local workspace."
-          : "Review this exact action before it changes your connected account."
+        mcp
+          ? "A bot wants to run this exact call on a connected service."
+          : w.mode === "sample"
+            ? "This action stays in your local workspace."
+            : "Review this exact action before it changes your connected account."
       }
       onClose={close}
     >
@@ -610,8 +613,22 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
         </Chip>
       </View>
       <Card style={{ gap: 13 }}>
-        <ReviewLine label="Account" value={action.account || w.profile.email} />
-        {email ? (
+        {!mcp && <ReviewLine label="Account" value={action.account || w.profile.email} />}
+        {mcp ? (
+          <>
+            <ReviewLine
+              label="Bot"
+              value={w.runtime.bots?.find((bot) => bot.id === d.botId)?.name ?? String(d.botId)}
+            />
+            <ReviewLine label="Service" value={String(d.server || "")} />
+            <ReviewLine label="Tool" value={String(d.tool || "")} />
+            <View style={s.divider} />
+            <Text style={s.label}>Arguments</Text>
+            <Text selectable style={[s.text, { fontFamily: "monospace" }]}>
+              {JSON.stringify(d.arguments ?? {}, null, 2)}
+            </Text>
+          </>
+        ) : email ? (
           <>
             <ReviewLine label="To" value={arrayText(d.to)} />
             <ReviewLine label="Cc" value={arrayText(d.cc) || "None"} />
@@ -697,13 +714,15 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
           </Text>
           <View style={[s.row, { gap: 10, flexWrap: "wrap" }]}>
             <Button primary icon={Check} busy={busy} onPress={() => void decide("approve")}>
-              {w.mode === "sample"
-                ? "Approve locally"
-                : email
-                  ? "Approve & send"
-                  : "Approve change"}
+              {mcp
+                ? "Approve & run"
+                : w.mode === "sample"
+                  ? "Approve locally"
+                  : email
+                    ? "Approve & send"
+                    : "Approve change"}
             </Button>
-            {action.kind !== "calendar.delete" && (
+            {action.kind !== "calendar.delete" && !mcp && (
               <Button icon={Edit3} disabled={busy} onPress={() => void edit()}>
                 Edit details
               </Button>

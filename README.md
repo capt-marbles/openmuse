@@ -55,6 +55,7 @@ The computer combines **persistent Chromium and an optional Linux workspace**. T
 | **Finance** | Import transaction CSV to create a spending summary with categories, transactions, and a savings-goal action. |
 | **Gmail & Calendar** | Google OAuth adapters, complete mail threads, drafts/attachments, calendar discovery, and reviewed event creation/update/deletion. Live credentials required. |
 | **Personal context** | Editable name, tone, avatar, and memories. Background-update preferences and durable in-app notifications. |
+| **Bots** | Named bots with their own instructions, tool groups and MCP servers that assign work to each other through durable tasks, with every external write reviewed. |
 | **Conversations** | A stable main conversation plus side chats with renaming, archiving, restoring and replay, stored in PGlite/PostgreSQL. CopilotKit Intelligence can optionally host them instead. |
 
 The [feature inventory](docs/FEATURES.md) describes implemented capabilities and planned extensions. Health/bank/social connectors, device push, voice, generated executable tools, and automatic reservations/payments are on the [roadmap](ROADMAP.md).
@@ -87,6 +88,21 @@ Open [localhost:8081](http://localhost:8081). The API runs at [localhost:8787/ap
 4. Start the [browser worker](#browser-worker) and configure a model, then ask **“Check out Hacker News for cool stuff”** or **“Summarize copilotkit.ai”**. Follow the browser inline and use **Take control** to open its session. For a model-free version of this flow, follow the [AI Mock demo setup](docs/DEMO.md#run-the-agent-browser-demo).
 
 For iOS or Android, use `pnpm --dir apps/mobile ios` or `pnpm --dir apps/mobile android`. Xcode or Android tooling is required. The PDF reader needs an Expo development build; use [native setup](apps/mobile/README.md).
+
+## Bots
+
+A bot is a worker with its own role, instructions and tools. Bots can assign work to each other: a Chief of Staff bot can hand "add Acme to the Leads table" to an Airtable bot, wait for the result, and report back. Define them in `$DATA_DIR/bots.json` (or `BOTS_FILE`); start from [bots.example.json](bots.example.json).
+
+| Field | Meaning |
+| --- | --- |
+| `id`, `name`, `description` | `default` is the bot behind the main chat; redefine it to make the main chat your Chief of Staff. |
+| `instructions` | The bot's role, added to its prompt. |
+| `tools` | Built-in groups: `workspace`, `documents`, `web`, `computer`, `email`, `calendar`. Omit for all; `[]` for none. |
+| `mcpServers` | Streamable HTTP or SSE MCP servers. Tools listed in `readOnlyTools` run directly; **every other tool pauses the task for your review** of the exact call, like email. |
+| `delegates` | Bots this bot may assign work to with `delegate_task`. |
+| `remote` | `{ "url", "token" }` for an external AG-UI agent instead of a built-in bot. |
+
+Write `${NAME}` for secrets; the value comes from `.env` and is never stored in tasks or reviews. Delegated work is a normal task owned by the other bot: the assigning task waits (`Waiting on other bots`), resumes with the results, and cancelling it cancels the work it assigned. Delegation is limited to three levels, and a bot cannot hand work back into its own chain. Each bot can also be chatted with directly from **New chat with…** in the menu; the chat's jobs run as that bot. Bot models use the server `MODEL`.
 
 ## Configure the agent and Google
 

@@ -401,7 +401,12 @@ function WorkspaceShell({
                   ) : null}
                   {!threadsLoading && selection.id !== mainId && (
                     <Text style={[s.small, { textAlign: "center", marginBottom: 8 }]}>
-                      Side chat
+                      {selection.agentId && selection.agentId !== "default"
+                        ? `Chat with ${
+                            workspace.runtime.bots?.find((a) => a.id === selection.agentId)?.name ??
+                            selection.agentId
+                          }`
+                        : "Side chat"}
                     </Text>
                   )}
                   {visited.map((thread) => (

@@ -1,0 +1,26 @@
+{
+  "bots": [
+    {
+      "id": "default",
+      "name": "Chief of Staff",
+      "description": "Runs the main chat and coordinates the other bots",
+      "instructions": "Understand what the owner needs, break it into parts, and assign each part to the bot best suited for it. Do small things yourself. Report back one combined answer.",
+      "delegates": ["airtable"]
+    },
+    {
+      "id": "airtable",
+      "name": "Airtable Bot",
+      "description": "Reads and updates the owner's Airtable bases",
+      "instructions": "Work only in Airtable. Look records up before creating them so you never add duplicates.",
+      "tools": [],
+      "mcpServers": [
+        {
+          "name": "airtable",
+          "url": "${AIRTABLE_MCP_URL}",
+          "headers": { "Authorization": "Bearer ${AIRTABLE_TOKEN}" },
+          "readOnlyTools": ["list_bases", "list_tables", "search_records", "get_record"]
+        }
+      ]
+    }
+  ]
+}
